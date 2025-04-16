@@ -3,7 +3,7 @@
 !.gitignore
 !*.md
 !*.go
-!*.json
+# !*.json
 # ...even if they are in subdirectories
 !*/
 !tests/*

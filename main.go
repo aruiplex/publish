@@ -18,8 +18,8 @@ import (
 // Configuration
 const (
 	listenAddr        = ":8080"          // Address the HTTP server listens on
-	inactivityTimeout = 5 * time.Minute  // Kill process after this duration of inactivity
-	checkInterval     = 30 * time.Second // How often to check for inactivity
+	inactivityTimeout = 20 * time.Minute // Kill process after this duration of inactivity
+	checkInterval     = 60 * time.Second // How often to check for inactivity
 	configFile        = "services.json"  // Name of the configuration file
 )
 

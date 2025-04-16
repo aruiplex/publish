@@ -1,0 +1,9 @@
+[
+    {
+        "path": "/echo",
+        "command": "echo ",
+        "args": [
+            "'Hello, World!'"
+        ]
+    }
+]

@@ -4,6 +4,7 @@ import (
 	"bytes" // Added for capturing output
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt" // Added for MultiWriter (optional, but good practice)
 	"io"
 	"log"
@@ -11,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 
 	// "path/filepath" // No longer strictly needed for validation shown
 	"strings"
@@ -20,14 +22,42 @@ import (
 )
 
 // Configuration
-const (
-	listenAddr        = ":8080"
-	inactivityTimeout = 30 * time.Minute
-	checkInterval     = 60 * time.Second
-	configFile        = "services.json"
-	// Max buffer size (e.g., 1MB) to prevent excessive memory usage. Adjust as needed.
-	maxBufferSize = 1 * 1024 * 1024
+var (
+	listenAddr        string
+	inactivityTimeout time.Duration
+	checkInterval     time.Duration
+	configFile        string
+	maxBufferSize     int
+	logFilePath       string // Optional: path to save logs
 )
+
+func init() {
+	// Define command line flags with default values
+	flag.StringVar(&listenAddr, "addr", ":8080", "Address and port to listen on")
+	flag.DurationVar(&inactivityTimeout, "timeout", 30*time.Minute, "Inactivity timeout before stopping processes")
+	flag.DurationVar(&checkInterval, "check", 60*time.Second, "Interval for checking process inactivity")
+	flag.StringVar(&configFile, "config", "services.json", "Path to services configuration file")
+	flag.StringVar(&logFilePath, "log", "log", "Path to save log files")
+	flag.IntVar(&maxBufferSize, "buffer", 1*1024*1024, "Maximum output buffer size in bytes")
+
+	// Parse command line arguments
+	flag.Parse()
+
+	// Log the configuration
+	log.Printf("Configuration: listen=%s, timeout=%v, check=%v, config=%s, buffer=%d bytes",
+		listenAddr, inactivityTimeout, checkInterval, configFile, maxBufferSize)
+
+	// check the logFilePath is exist, if not, create it
+	if _, err := os.Stat(logFilePath); os.IsNotExist(err) {
+		err := os.MkdirAll(logFilePath, 0755)
+		if err != nil {
+			log.Fatalf("Failed to create log directory: %v", err)
+		}
+		log.Printf("Log directory created: %s", logFilePath)
+	} else {
+		log.Printf("Log directory exists: %s", logFilePath)
+	}
+}
 
 // Structure to hold info about the managed process
 type managedProcess struct {
@@ -285,12 +315,34 @@ func handleServiceRequest(w http.ResponseWriter, r *http.Request, config service
 		globalMutex.Unlock() // Unlock global state
 
 		// Final log entry from the buffer (optional)
-		// p.bufferMutex.Lock()
-		// finalBytes := p.outputBuffer.Bytes() // Get remaining bytes
-		// if len(finalBytes) > 0 {
-		// 	log.Printf("Final captured output for exited process PID %d (%s %v):\n---\n%s\n---", pid, p.command, p.args, string(finalBytes))
-		// }
-		// p.bufferMutex.Unlock()
+		p.bufferMutex.Lock()
+		if len(p.outputBuffer.Bytes()) > 0 {
+			// Create timestamp-based filename
+			timestamp := time.Now().Format("2006-01-02_15-04-05")
+			// save the logs to a file under the dir logFilePath
+			filename := fmt.Sprintf("logs_%s_pid%d.txt", timestamp, pid)
+			filename = filepath.Join(logFilePath, filename) // Use the logFilePath directory
+
+			// Save to log file
+			err := os.WriteFile(filename, p.outputBuffer.Bytes(), 0644)
+			if err != nil {
+				log.Printf("Error saving logs to file %s: %v", filename, err)
+			} else {
+				log.Printf("Saved logs for exited process PID %d (%s %v) to file: %s",
+					pid, p.command, p.args, filename)
+			}
+
+			// Log final output summary
+			if len(p.outputBuffer.Bytes()) > 200 {
+				// For large outputs, just log the first part
+				log.Printf("Process PID %d exited. First 200 bytes of log saved to %s:\n---\n%s\n---",
+					pid, filename, string(p.outputBuffer.Bytes()[:200]))
+			} else {
+				log.Printf("Process PID %d exited. Full log saved to %s:\n---\n%s\n---",
+					pid, filename, p.outputBuffer.String())
+			}
+		}
+		p.bufferMutex.Unlock()
 
 	}(newProc) // Pass the new process info
 

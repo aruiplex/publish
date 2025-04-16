@@ -1,22 +1,53 @@
-# Publish: Process Manager Server
+# Process Manager HTTP Server
 
-This is a simple HTTP-based process manager server written in Go that allows you to define and trigger command-line processes via HTTP endpoints.
-
-## Overview
-
-The server reads service configurations from a JSON file and creates HTTP endpoints for each configured service. When a request is made to a service endpoint, the server executes the corresponding command, terminates inactive processes after a timeout, and handles graceful shutdowns.
+A lightweight HTTP server written in Go that manages external processes through HTTP endpoints. This server enables you to define commands and arguments in a JSON configuration file and expose them as HTTP endpoints, allowing you to trigger processes via simple HTTP requests.
 
 ## Features
 
-- **Dynamic Endpoint Configuration**: Services are defined in a JSON configuration file
-- **Process Lifecycle Management**: Automatically starts and stops processes on request
-- **Inactivity Timeout**: Kills processes after a defined period of inactivity
-- **Graceful Shutdown**: Handles termination signals by cleaning up processes
-- **Process Output Capture**: Captures stdout/stderr of child processes
+- **HTTP-based Process Execution**: Trigger processes through HTTP endpoints
+- **Dynamic Endpoint Configuration**: Configure services through a JSON file
+- **Process Management**: Only one process runs at a time, with automatic replacement
+- **Process Output Capture**: View process logs through dedicated HTTP endpoints
+- **Automatic Process Cleanup**: Kill inactive processes after a configurable timeout
+- **Graceful Shutdown**: Clean termination of managed processes on server shutdown
+
+## Installation
+
+1. Clone this repository
+2. Ensure Go is installed on your system
+3. Run directly or build:
+
+```bash
+# Run directly
+go run main.go
+
+# Or build and run
+go build
+./publish  # Name will match your go.mod module name
+```
 
 ## Configuration
 
-Services are defined in `services.json` with the following structure:
+### Command Line Flags
+
+The server accepts the following command line flags:
+
+- `-addr`: Address and port to listen on (default: `:8080`)
+- `-timeout`: Inactivity timeout before stopping processes (default: `30m`)
+- `-check`: Interval for checking process inactivity (default: `60s`)
+- `-config`: Path to services configuration file (default: `services.json`)
+- `-log`: Directory to save log files (default: `log`)
+- `-buffer`: Maximum output buffer size in bytes (default: `1048576` - 1MB)
+
+Example:
+
+```bash
+./publish -addr=:9090 -timeout=10m -check=30s -config=custom-services.json
+```
+
+### Service Configuration
+
+Services are defined in a JSON file (default: `services.json`) with the following structure:
 
 ```json
 [
@@ -28,9 +59,7 @@ Services are defined in `services.json` with the following structure:
 ]
 ```
 
-### Example Configuration
-
-The default configuration includes an echo service:
+Example configuration:
 
 ```json
 [
@@ -38,41 +67,71 @@ The default configuration includes an echo service:
     "path": "/echo",
     "command": "echo",
     "args": ["'Hello, World!'"]
+  },
+  {
+    "path": "/echos",
+    "command": "bash",
+    "args": ["./tests/echos.sh"]
   }
 ]
 ```
 
 ## Usage
 
-### Starting the Server
+### Starting a Process
 
-```bash
-go run main.go
-```
-
-The server listens on port 8080 by default.
-
-### Making Requests
-
-To trigger a service, make an HTTP request to its path:
+Make an HTTP GET request to the configured endpoint:
 
 ```bash
 curl http://localhost:8080/echo
 ```
 
-This will execute the command defined for the `/echo` endpoint.
+This will:
 
-## Technical Details
+1. Start the configured process if not already running
+2. Return a success message with PID and log path information
+3. If a different process is already running, it will be terminated first
 
-- **Inactivity Timeout**: Processes are killed after 5 minutes of inactivity
-- **Check Interval**: Inactivity is checked every 30 seconds
-- **Configuration File**: Services are loaded from `services.json`
+### Viewing Process Logs
+
+Each endpoint has a corresponding logs endpoint:
+
+```bash
+curl http://localhost:8080/echo/logs
+```
+
+This returns the current stdout/stderr output from the running process.
+
+### Default Page
+
+Access the root path (`/`) to see available service endpoints:
+
+```bash
+curl http://localhost:8080/
+```
+
+## Process Lifecycle
+
+1. **Starting**: When a request is made to a service endpoint
+2. **Running**: Process runs until completion or forced termination
+3. **Termination**: Processes are terminated:
+   - When a new process is requested
+   - After being inactive for the configured timeout (default: 30 minutes)
+   - When the server receives a shutdown signal (SIGTERM/SIGINT)
+
+## Log Files
+
+Process output logs are saved to the configured log directory (default: `./log`) when processes exit, with filenames based on timestamps and process IDs.
 
 ## Development
 
-To modify server behavior, you can update these constants in [main.go](main.go):
+The server is designed with concurrency in mind and uses mutexes to safely manage process state. Key components:
 
-- `listenAddr`: HTTP server address (default: `:8080`)
-- `inactivityTimeout`: Duration before killing inactive processes
-- `checkInterval`: How often to check for inactivity
-- `configFile`: Name of the configuration file
+- **HTTP Server**: Handles incoming requests and routes to appropriate handlers
+- **Process Manager**: Starts, monitors, and terminates processes
+- **Buffer Management**: Captures and limits process output
+- **Inactivity Monitor**: Background goroutine checks for inactive processes
+
+## License
+
+I do not care.

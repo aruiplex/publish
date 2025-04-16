@@ -1,0 +1,16 @@
+[
+    {
+        "path": "/echo",
+        "command": "echo ",
+        "args": [
+            "'Hello, World!'"
+        ]
+    },
+    {
+        "path": "/echos",
+        "command": "bash",
+        "args": [
+            "./tests/echos.sh"
+        ]
+    }
+]

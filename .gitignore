@@ -1,0 +1,11 @@
+*
+
+!.gitignore
+!*.md
+!*.go
+!*.json
+# ...even if they are in subdirectories
+!*/
+!tests/*
+
+.vscode/
